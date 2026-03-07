@@ -48,21 +48,34 @@ export function reduceChatBlocks(
     let hasReadyEvent = rootResult.hasReadyEvent
 
     // Only create permission-only tool cards when there is no tool call/result in the transcript.
-    // Also skip if the permission is older than the oldest message in the current view,
-    // to avoid mixing old tool cards with newer messages when paginating.
+    // Completed permissions that are older than the current message window stay hidden until
+    // older messages are loaded, but pending permissions must remain visible so users can act.
     const oldestMessageTime = normalized.length > 0
         ? Math.min(...normalized.map(m => m.createdAt))
         : null
 
     for (const [id, entry] of permissionsById) {
-        if (toolIdsInMessages.has(id)) continue
+        const isPendingPermission = entry.permission.status === 'pending'
+        // Pending approvals must remain actionable even when the transcript already
+        // contains the tool_call id but that call is not currently materialized
+        // into a visible tool block (e.g. dropped/unresolved sidechain messages).
+        if (!isPendingPermission && toolIdsInMessages.has(id)) continue
         if (rootResult.toolBlocksById.has(id)) continue
 
         const createdAt = entry.permission.createdAt ?? Date.now()
 
-        // Skip permissions that are older than the oldest message in the current view.
-        // These will be shown when the user loads older messages.
-        if (oldestMessageTime !== null && createdAt < oldestMessageTime) {
+        // When no message page is loaded yet (initial route enter), historical
+        // completed/denied permission cards cause a visible flicker.
+        // Keep startup clean and only surface non-pending cards after we have
+        // at least one loaded message timestamp to compare against.
+        if (!isPendingPermission && oldestMessageTime === null) {
+            continue
+        }
+
+        // Skip historical non-pending permissions that are outside the current page window.
+        // Pending requests should always be visible even when their original tool_call message
+        // is older than the currently loaded page.
+        if (!isPendingPermission && oldestMessageTime !== null && createdAt < oldestMessageTime) {
             continue
         }
 
