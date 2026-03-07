@@ -21,7 +21,15 @@ export type LatestUsage = {
 
 export function reduceChatBlocks(
     normalized: NormalizedMessage[],
-    agentState: AgentState | null | undefined
+    agentState: AgentState | null | undefined,
+    options?: {
+        /**
+         * True while the first message page is still being fetched.
+         * Use this to suppress startup-only historical permission fallback cards
+         * and avoid first-frame flicker.
+         */
+        isInitialMessagesLoading?: boolean
+    }
 ): { blocks: ChatBlock[]; hasReadyEvent: boolean; latestUsage: LatestUsage | null } {
     const permissionsById = getPermissions(agentState)
     const toolIdsInMessages = collectToolIdsFromMessages(normalized)
@@ -53,6 +61,7 @@ export function reduceChatBlocks(
     const oldestMessageTime = normalized.length > 0
         ? Math.min(...normalized.map(m => m.createdAt))
         : null
+    const isInitialMessagesLoading = options?.isInitialMessagesLoading === true
 
     for (const [id, entry] of permissionsById) {
         const isPendingPermission = entry.permission.status === 'pending'
@@ -68,7 +77,7 @@ export function reduceChatBlocks(
         // completed/denied permission cards cause a visible flicker.
         // Keep startup clean and only surface non-pending cards after we have
         // at least one loaded message timestamp to compare against.
-        if (!isPendingPermission && oldestMessageTime === null) {
+        if (!isPendingPermission && oldestMessageTime === null && isInitialMessagesLoading) {
             continue
         }
 

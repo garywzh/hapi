@@ -71,10 +71,35 @@ describe('reduceChatBlocks permission fallback cards', () => {
             }
         } as unknown as AgentState
 
-        const { blocks } = reduceChatBlocks(messages, agentState)
+        const { blocks } = reduceChatBlocks(messages, agentState, { isInitialMessagesLoading: true })
         const completed = blocks.find(block => block.kind === 'tool-call' && block.id === 'toolu_done')
 
         expect(completed).toBeUndefined()
+    })
+
+    it('shows non-pending permissions when message loading is complete, even with no messages', () => {
+        const messages: NormalizedMessage[] = []
+        const agentState = {
+            completedRequests: {
+                toolu_done: {
+                    tool: 'WebSearch',
+                    arguments: { query: 'hapi' },
+                    status: 'approved',
+                    createdAt: 1_000,
+                    completedAt: 1_100
+                }
+            }
+        } as unknown as AgentState
+
+        const { blocks } = reduceChatBlocks(messages, agentState, { isInitialMessagesLoading: false })
+        const completed = blocks.find(block => block.kind === 'tool-call' && block.id === 'toolu_done')
+
+        expect(completed).toBeDefined()
+        expect(completed?.kind).toBe('tool-call')
+        if (completed?.kind === 'tool-call') {
+            expect(completed.tool.permission?.status).toBe('approved')
+            expect(completed.tool.state).toBe('completed')
+        }
     })
 
     it('keeps pending permission cards visible when sidechain tool calls are unresolved', () => {
@@ -126,6 +151,47 @@ describe('reduceChatBlocks permission fallback cards', () => {
         expect(pending?.kind).toBe('tool-call')
         if (pending?.kind === 'tool-call') {
             expect(pending.tool.permission?.status).toBe('pending')
+        }
+    })
+
+    it('does not duplicate pending permission cards when the tool block already exists', () => {
+        const messages: NormalizedMessage[] = [
+            {
+                id: 'agent-tool-call',
+                localId: null,
+                role: 'agent',
+                createdAt: 2_000,
+                isSidechain: false,
+                content: [
+                    {
+                        type: 'tool-call',
+                        id: 'toolu_existing_pending',
+                        name: 'WebSearch',
+                        input: { query: 'hapi dedupe' },
+                        description: null,
+                        uuid: 'tool-call-uuid',
+                        parentUUID: null
+                    }
+                ]
+            }
+        ]
+        const agentState = {
+            requests: {
+                toolu_existing_pending: {
+                    tool: 'WebSearch',
+                    arguments: { query: 'hapi dedupe' },
+                    createdAt: 1_000
+                }
+            }
+        } as unknown as AgentState
+
+        const { blocks } = reduceChatBlocks(messages, agentState)
+        const matched = blocks.filter(block => block.kind === 'tool-call' && block.id === 'toolu_existing_pending')
+
+        expect(matched).toHaveLength(1)
+        expect(matched[0]?.kind).toBe('tool-call')
+        if (matched[0]?.kind === 'tool-call') {
+            expect(matched[0].tool.permission?.status).toBe('pending')
         }
     })
 })

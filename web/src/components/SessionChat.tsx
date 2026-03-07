@@ -180,8 +180,10 @@ export function SessionChat(props: {
     }, [props.messages])
 
     const reduced = useMemo(
-        () => reduceChatBlocks(normalizedMessages, props.session.agentState),
-        [normalizedMessages, props.session.agentState]
+        () => reduceChatBlocks(normalizedMessages, props.session.agentState, {
+            isInitialMessagesLoading: props.isLoadingMessages,
+        }),
+        [normalizedMessages, props.session.agentState, props.isLoadingMessages]
     )
     const reconciled = useMemo(
         () => reconcileChatBlocks(reduced.blocks, blocksByIdRef.current),
